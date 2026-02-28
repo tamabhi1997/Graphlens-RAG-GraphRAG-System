@@ -1,0 +1,16 @@
+app:
+  name: GraphLens
+  frontend: streamlit
+
+models:
+  llm: gpt-4.1-mini
+  embedding: text-embedding-3-large
+
+retrieval:
+  top_k: 5
+  chunk_size: 1000
+  chunk_overlap: 150
+
+vector_store:
+  provider: placeholder
+  collection: graphlens-default

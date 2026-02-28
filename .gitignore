@@ -1,0 +1,21 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.DS_Store
+
+# Notebook noise
+.ipynb_checkpoints/
+
+# Data artifacts
+data/raw/*
+data/processed/*
+data/vector_indexes/*
+
+# Keep placeholder files
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/vector_indexes/.gitkeep
+!data/samples/.gitkeep
