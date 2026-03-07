@@ -1,0 +1,77 @@
+Metadata-Version: 2.4
+Name: graphlens
+Version: 0.1.0
+Summary: Starter template for a Python RAG and vector database project.
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: python-dotenv>=1.0.1
+Requires-Dist: pydantic>=2.10.0
+Requires-Dist: pyyaml>=6.0.2
+Requires-Dist: streamlit>=1.42.0
+Requires-Dist: gradio>=5.18.0
+Dynamic: license-file
+
+# GraphLens
+
+Starter template for a Python-based data project with:
+
+- RAG pipelines
+- Vector database integrations
+- Streamlit or Gradio frontends
+- Local scripts, notebooks, and test scaffolding
+
+## Project Structure
+
+```text
+GraphLens/
+├── app/                    # Frontend entry points
+├── server_backend/         # FastAPI backend (API endpoints for transcript/ingest/query)
+├── config/                 # YAML / TOML runtime configs
+├── data/                   # Local project data (gitignored except placeholders)
+├── docs/                   # Notes, architecture docs, ADRs
+├── notebooks/              # Exploration notebooks
+├── scripts/                # CLI helpers for ingest, index, eval
+├── src/graphlens/          # Main Python package (core logic)
+├── tests/                  # Test suite
+├── .env.example            # Environment variable template
+├── .gitignore
+└── pyproject.toml
+```
+
+## Quick Start
+
+1. Create a virtual environment.
+2. Install the project in editable mode: `pip install -e .`
+3. Copy `.env.example` to `.env` and fill in provider keys.
+4. Start a UI:
+   - Streamlit: `streamlit run app/streamlit_app.py`
+   - Gradio: `python app/gradio_app.py`
+
+# server backend
+
+FastAPI Backend (API)
+
+The FastAPI backend exposes a simple RAG pipeline as HTTP endpoints so the frontend can call it directly.
+
+Main endpoints (v1):
+
+POST /api/v1/transcript → YouTube URL → timestamped transcript (normalized)
+
+POST /api/v1/ingest → transcript/URL → chunks + embeddings → stored in vector DB
+
+POST /api/v1/query → question → retrieves chunks from vector DB → returns answer
+
+Run the API locally:
+
+uvicorn server_backend.main:app --reload
+
+Swagger docs:
+
+http://127.0.0.1:8000/docs
+
+Code layout:
+
+server_backend/ → API layer (routes + schemas)
+
+src/graphlens/ → core logic (transcripts/chunking/embeddings/vector store)
