@@ -24,6 +24,8 @@ class Chunk:
     metadata: Dict[str, Any]
 
 
+
+
 def chunk_transcript_doc(
     doc: Dict[str, Any],
     *,
