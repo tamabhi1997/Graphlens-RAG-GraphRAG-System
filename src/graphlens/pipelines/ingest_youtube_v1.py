@@ -59,6 +59,8 @@ def ingest_youtube_url_v1(
     # 1) Transcript
     # -------------------------
     doc = get_transcript_segments_v1(url, languages=languages)
+    print("transciot")
+    # print(doc)
     video_id = doc["video_id"]
     segment_count = doc["segment_count"]
 
@@ -72,6 +74,7 @@ def ingest_youtube_url_v1(
         max_seconds=chunk_cfg.get("max_seconds", 135.0),
         overlap_chars=chunk_cfg.get("overlap_chars", 250),
     )
+    print(chunks)
 
     # -------------------------
     # 3) Cleaning (for embeddings + retrieval)
