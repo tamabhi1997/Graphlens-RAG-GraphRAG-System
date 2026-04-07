@@ -2,7 +2,8 @@ import os
 from dotenv import load_dotenv
 
 from graphlens.utils.youtube_v1 import get_transcript_segments_v1
-from graphlens.chunking.hybrid_v1 import chunk_transcript_doc
+# from graphlens.chunking.hybrid_v1 import chunk_transcript_doc - replaced with token chunking
+from graphlens.chunking.hybrid_v2 import chunk_transcript_doc_v2 
 from graphlens.chunking.chunk_cleaner import clean_for_embedding
 from graphlens.vectorstores.chroma_v1 import ChromaStore
 from graphlens.pipelines.summarize_v1 import (
@@ -67,14 +68,22 @@ def ingest_youtube_url_v1(
     # -------------------------
     # 2) Chunking
     # -------------------------
-    chunks = chunk_transcript_doc(
+    # chunks = chunk_transcript_doc_v2(
+    #     doc,
+    #     max_chars=chunk_cfg.get("max_chars", 2200),
+    #     min_chars=chunk_cfg.get("min_chars", 1200),
+    #     max_seconds=chunk_cfg.get("max_seconds", 135.0),
+    #     overlap_chars=chunk_cfg.get("overlap_chars", 250),
+    # )
+    # print(chunks)
+    chunks = chunk_transcript_doc_v2(
         doc,
-        max_chars=chunk_cfg.get("max_chars", 2200),
-        min_chars=chunk_cfg.get("min_chars", 1200),
+        max_tokens=chunk_cfg.get("max_tokens", 400),
+        min_tokens=chunk_cfg.get("min_tokens", 100),
+        overlap_tokens=chunk_cfg.get("overlap_tokens", 40),
         max_seconds=chunk_cfg.get("max_seconds", 135.0),
-        overlap_chars=chunk_cfg.get("overlap_chars", 250),
     )
-    print(chunks)
+    # print(chunks)
 
     # -------------------------
     # 3) Cleaning (for embeddings + retrieval)

@@ -1,0 +1,42 @@
+Start with the simplest possible idea
+Imagine you're designing a compression system. You have this text to store:
+aaabdaaabac
+Storing every character individually is wasteful. You notice "aa" appears a lot. So you say — let's replace every "aa" with a new symbol, say "Z":
+ZabdZabac        (aa → Z)
+Now "Za" appears twice. Replace it with "Y":
+YbdYbac          (Za → Y)
+That's the core idea of BPE — Byte Pair Encoding. Find the most frequent pair, merge it into one symbol, repeat.
+
+How OpenAI trained the tokenizer
+They ran BPE on a massive corpus of internet text — billions of documents. The algorithm:
+
+Start with every individual character as a token
+Find the most frequently co-occurring pair across the entire corpus
+Merge that pair into a new token
+Repeat ~100,000 times
+
+After 100,000 merges, you have a vocabulary of 100,000 tokens — the cl100k vocabulary.
+The result? Frequent English words got merged all the way into single tokens early. Rare words never got fully merged, so they stay as fragments.
+
+Let's trace your exact examples
+unbelievable → un + believ + able
+Why? Because in the training corpus:
+
+"able" appears in thousands of words (capable, remarkable, notable...) → merged early into one token
+"un" appears as a prefix constantly → merged early
+"believ" is common enough → got its own token
+But "unbelievable" as a whole word is rare enough that it never got a dedicated merge
+
+ChatGPT → Chat + G + PT
+
+"Chat" — very common English word → one token
+"GPT" — this is the key insight. The tokenizer was trained before GPT was a household name. So "GPT" wasn't frequent enough to get merged as a unit. It stays as G + PT
+
+... → 1 token
+Three dots together appear constantly in internet text. Got merged into a single token very early.
+
+The rule, stated simply
+
+A sequence of characters becomes one token if it appeared together frequently enough during training to survive as a merged unit. Otherwise it gets broken into whatever sub-pieces did survive.
+
+There's no grammar rule. No linguistic rule. Pure statistics over a massive corpus.
