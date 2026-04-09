@@ -11,7 +11,8 @@ class QueryRequest(BaseModel):
 
 class SourceOut(BaseModel):
     chunk_id: str
-    similarity: float
+    similarity: float          # cosine similarity — stage 1 score
+    rerank_score: Optional[float] = None   # cross-encoder score — stage 2
     video_id: Optional[str] = None
     course_id: Optional[str] = None
     source_url: Optional[str] = None
