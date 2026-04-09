@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 class QueryRequest(BaseModel):
     question: str
-    scope_type: Literal["video", "course"] = "video"
+    scope_type: Literal["video", "course", "document"] = "video"
     scope_id: Optional[str] = None
     collection_name: str = "graphlens_chunks"
 

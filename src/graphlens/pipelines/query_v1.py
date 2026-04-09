@@ -18,10 +18,11 @@ def query_v1(
     - Backend controls: top_k, thresholds, refusal
     """
 
-    # Backend knobs (keep here for now; later move to config/env)
+    # Backend knobs
     TOP_K = 4
     MIN_SIM_VIDEO = 0.28
     MIN_SIM_COURSE = 0.25
+    MIN_SIM_DOCUMENT = 0.25
 
     # 1) Embed question
     qvec = embed_query(question)
@@ -34,8 +35,10 @@ def query_v1(
     elif scope_type == "course" and scope_id:
         where = {"course_id": scope_id}
         min_sim = MIN_SIM_COURSE
+    elif scope_type == "document" and scope_id:
+        where = {"doc_id": scope_id}
+        min_sim = MIN_SIM_DOCUMENT
     else:
-        # If no scope provided, search everything (you can choose to refuse instead)
         min_sim = MIN_SIM_COURSE
 
     # 3) Query vector DB
@@ -60,6 +63,7 @@ def query_v1(
                 "similarity": sim,
                 "video_id": meta.get("video_id"),
                 "course_id": meta.get("course_id"),
+                "doc_id": meta.get("doc_id"),   
                 "source_url": meta.get("source_url"),
                 "start_seconds": meta.get("start_seconds"),
                 "end_seconds": meta.get("end_seconds"),
