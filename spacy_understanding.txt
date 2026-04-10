@@ -1,0 +1,21 @@
+Option 1 — spaCy + dependency parsing (free, fast, no API)
+spaCy is an NLP library that does grammatical parsing. It understands sentence structure — subject, verb, object.
+"Backpropagation uses the chain rule"
+     ↑ subject    ↑ verb    ↑ object
+From this you can automatically extract:
+entity1: "Backpropagation"
+relation: "USES"
+entity2: "chain rule"
+This is called Subject-Verb-Object (SVO) triple extraction — it's a classical NLP technique, completely free, runs locally, no API calls.
+pythonimport spacy
+nlp = spacy.load("en_core_web_sm")  # free model
+
+doc = nlp("Backpropagation uses the chain rule")
+for token in doc:
+    if token.dep_ == "ROOT":  # main verb
+        subject = [w for w in token.lefts if w.dep_ == "nsubj"]
+        obj = [w for w in token.rights if w.dep_ in ("dobj","pobj")]
+        print(subject, token.lemma_, obj)
+# → [Backpropagation] use [chain rule]
+Pros: Free, fast, runs offline, no cost ever
+Cons: Struggles with complex academic sentences, misses implicit relationships, no understanding of context

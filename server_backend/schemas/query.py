@@ -1,4 +1,4 @@
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict, Any
 from pydantic import BaseModel, Field
 
 
@@ -7,6 +7,7 @@ class QueryRequest(BaseModel):
     scope_type: Literal["video", "course", "document"] = "video"
     scope_id: Optional[str] = None
     collection_name: str = "graphlens_chunks"
+    use_graph: bool = False    
 
 
 class SourceOut(BaseModel):
@@ -27,3 +28,4 @@ class QueryResponse(BaseModel):
     best_similarity: Optional[float] = None
     answer: Optional[str] = None
     sources: List[SourceOut] = Field(default_factory=list)
+    graph_expansion: Optional[Dict[str, Any]] = None 
