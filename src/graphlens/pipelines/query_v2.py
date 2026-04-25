@@ -8,6 +8,8 @@ from graphlens.vectorstores.chroma_v1 import ChromaStore
 from graphlens.retrievers.reranker_v1 import rerank
 from graphlens.graphrag.neo4j_client import get_related_chunk_ids
 from graphlens.graphrag.graph_builder import build_graph_for_chunks
+from graphlens.pipelines.generator_v1 import generate_answer
+
 
 
 def query_v2(
@@ -179,11 +181,19 @@ def query_v2(
             "graph_expansion": graph_expansion_info,
         }
 
+    # -------------------------
+    # 10) Stage 8: generate answer
+    # -------------------------
+    generated = generate_answer(question, top_chunks)
+
     return {
-        "refused":          False,
+        "refused":          generated["refused"],
+        "reason":           None,
         "best_similarity":  best_sim,
         "rerank_score":     top_chunks[0].get("rerank_score"),
-        "answer":           None,   # Gemini later
+        "answer":           generated["answer"],
+        "citations":        generated["citations"],
+        "model":            generated["model"],
         "sources":          top_chunks,
         "graph_expansion":  graph_expansion_info,
     }

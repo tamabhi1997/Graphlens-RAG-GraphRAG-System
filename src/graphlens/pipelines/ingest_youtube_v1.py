@@ -9,7 +9,8 @@ from graphlens.vectorstores.chroma_v1 import ChromaStore
 from graphlens.pipelines.summarize_v1 import (
     estimate_duration_seconds,
     seconds_to_hhmmss,
-    make_summary_from_text,
+    # make_summary_from_text,
+    make_summary_from_chunks,
     extract_key_topics,
 )
 
@@ -127,8 +128,10 @@ def ingest_youtube_url_v1(
     duration_hhmmss = seconds_to_hhmmss(duration_seconds)
 
     # Summary: use first cleaned chunk as the "lead", because it's usually the intro/overview
-    lead_text = clean_texts[0] if clean_texts else ""
-    summary = make_summary_from_text(lead_text, max_sentences=3, max_chars=600)
+    # lead_text = clean_texts[0] if clean_texts else ""
+    # summary = make_summary_from_text(lead_text, max_sentences=3, max_chars=600)
+    summary = make_summary_from_chunks(clean_texts, max_sentences=3, max_chars=600)
+
 
     # Topics: use the first few chunks (or all if you want)
     topic_texts = clean_texts[:8]  # limit for speed + relevance

@@ -2,6 +2,7 @@ from typing import List, Optional, Literal, Dict, Any
 from pydantic import BaseModel, Field
 
 
+
 class QueryRequest(BaseModel):
     question: str
     scope_type: Literal["video", "course", "document"] = "video"
@@ -27,5 +28,7 @@ class QueryResponse(BaseModel):
     reason: Optional[str] = None
     best_similarity: Optional[float] = None
     answer: Optional[str] = None
+    citations: List[int] = Field(default_factory=list)    
+    model: Optional[str] = None 
     sources: List[SourceOut] = Field(default_factory=list)
     graph_expansion: Optional[Dict[str, Any]] = None 
