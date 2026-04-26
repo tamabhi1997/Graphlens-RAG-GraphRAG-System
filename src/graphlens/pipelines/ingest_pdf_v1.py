@@ -7,10 +7,7 @@ from graphlens.utils.pdf_v1 import extract_pdf_segments
 from graphlens.chunking.hybrid_v2 import chunk_transcript_doc_v2
 from graphlens.chunking.chunk_cleaner import clean_for_embedding
 from graphlens.vectorstores.chroma_v1 import ChromaStore
-from graphlens.pipelines.summarize_v1 import (
-    make_summary_from_chunks,
-    extract_key_topics,
-)
+from graphlens.pipelines.summarize_v1 import make_summary_from_chunks
 from graphlens.embeddings.openai_v1 import embed_texts
 
 
@@ -147,10 +144,12 @@ def ingest_pdf_v1(
     # -------------------------
     # lead_text = clean_texts[0] if clean_texts else ""
     # summary = make_summary_from_text(lead_text, max_sentences=3, max_chars=600)
-    summary = make_summary_from_chunks(clean_texts, max_sentences=3, max_chars=600)
+    # summary = make_summary_from_chunks(clean_texts)
 
-    topic_texts = clean_texts[:8]
-    key_topics = extract_key_topics(topic_texts, top_n=8)
+    # step = max(1, len(clean_texts) // 8)
+    # topic_texts = [clean_texts[i] for i in range(0, len(clean_texts), step)][:8]
+    # key_topics = extract_key_topics(topic_texts, top_n=8)
+    summary, key_topics = make_summary_from_chunks(clean_texts)
 
     return {
         # scope for frontend queries

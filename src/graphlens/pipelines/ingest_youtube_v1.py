@@ -9,10 +9,15 @@ from graphlens.vectorstores.chroma_v1 import ChromaStore
 from graphlens.pipelines.summarize_v1 import (
     estimate_duration_seconds,
     seconds_to_hhmmss,
-    # make_summary_from_text,
     make_summary_from_chunks,
-    extract_key_topics,
 )
+# from graphlens.pipelines.summarize_v1 import (
+#     estimate_duration_seconds,
+#     seconds_to_hhmmss,
+#     # make_summary_from_text,
+#     make_summary_from_chunks,
+#     extract_key_topics,
+# )
 
 # Your embeddings file might be "function based" (embed_texts)
 # or "class based" (OpenAIEmbedder). We'll support BOTH.
@@ -130,12 +135,15 @@ def ingest_youtube_url_v1(
     # Summary: use first cleaned chunk as the "lead", because it's usually the intro/overview
     # lead_text = clean_texts[0] if clean_texts else ""
     # summary = make_summary_from_text(lead_text, max_sentences=3, max_chars=600)
-    summary = make_summary_from_chunks(clean_texts, max_sentences=3, max_chars=600)
+    # summary = make_summary_from_chunks(clean_texts)
 
 
-    # Topics: use the first few chunks (or all if you want)
-    topic_texts = clean_texts[:8]  # limit for speed + relevance
-    key_topics = extract_key_topics(topic_texts, top_n=8)
+    # # Topics: use the first few chunks (or all if you want)
+    # step = max(1, len(clean_texts) // 8)
+    # topic_texts = [clean_texts[i] for i in range(0, len(clean_texts), step)][:8]
+    # key_topics = extract_key_topics(topic_texts, top_n=8)
+    summary, key_topics = make_summary_from_chunks(clean_texts)
+
 
     # Optional: delete old entries for this video_id (fresh rebuild)
     if force_reindex:
