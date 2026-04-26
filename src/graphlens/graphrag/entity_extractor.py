@@ -12,7 +12,6 @@ import spacy
 
 _NLP = None
 
-
 def _get_nlp():
     global _NLP
     if _NLP is None:

@@ -12,7 +12,6 @@ from neo4j import GraphDatabase
 
 _DRIVER = None
 
-
 def _get_driver():
     global _DRIVER
     if _DRIVER is None:
@@ -96,12 +95,20 @@ def store_chunk_node(
         )
 
 
-# ---------------------------------------------------------------------------
-# Concept + relationship operations
-# ---------------------------------------------------------------------------
-
+# These are the THREE updated functions to replace in neo4j_client.py
+# Find each function by name and replace the full function body.
+# Add this import at the top of neo4j_client.py:
+#   from graphlens.graphrag.entity_normaliser import normalise_concept
+ 
+ 
 def store_concept(name: str, description: str = "") -> None:
-    """Create or update a Concept node."""
+    """Create or update a Concept node — normalises name before storing."""
+    from graphlens.graphrag.entity_normaliser import normalise_concept
+ 
+    canonical = normalise_concept(name)
+    if not canonical:
+        return  # skip noise concepts
+ 
     driver = _get_driver()
     with driver.session() as session:
         session.run(
@@ -111,13 +118,19 @@ def store_concept(name: str, description: str = "") -> None:
                           c.mention_count = 1
             ON MATCH SET  c.mention_count = c.mention_count + 1
             """,
-            name=name.lower().strip(),
+            name=canonical,
             description=description,
         )
-
-
+ 
+ 
 def store_mentions(chunk_id: str, concept_name: str) -> None:
-    """Create MENTIONS edge: Chunk → Concept."""
+    """Create MENTIONS edge — normalises concept name before storing."""
+    from graphlens.graphrag.entity_normaliser import normalise_concept
+ 
+    canonical = normalise_concept(concept_name)
+    if not canonical:
+        return  # skip noise concepts
+ 
     driver = _get_driver()
     with driver.session() as session:
         session.run(
@@ -127,20 +140,31 @@ def store_mentions(chunk_id: str, concept_name: str) -> None:
             MERGE (chunk)-[:MENTIONS]->(concept)
             """,
             chunk_id=chunk_id,
-            concept_name=concept_name.lower().strip(),
+            concept_name=canonical,
         )
-
-
+ 
+ 
 def store_relationship(
     from_concept: str,
     rel_type: str,
     to_concept: str,
 ) -> None:
-    """Create a relationship between two concepts."""
+    """Create relationship between two concepts — normalises both names."""
+    from graphlens.graphrag.entity_normaliser import normalise_concept
+ 
+    from_canonical = normalise_concept(from_concept)
+    to_canonical   = normalise_concept(to_concept)
+ 
+    if not from_canonical or not to_canonical:
+        return  # skip if either is noise
+ 
+    if from_canonical == to_canonical:
+        return  # skip self-relationships
+ 
     valid_types = {"USES", "TRAINS", "REQUIRES", "RELATES_TO", "PART_OF", "OPTIMIZES"}
     if rel_type not in valid_types:
-        rel_type = "RELATES_TO"  # safe fallback
-
+        rel_type = "RELATES_TO"
+ 
     driver = _get_driver()
     with driver.session() as session:
         query = f"""
@@ -150,8 +174,8 @@ def store_relationship(
         """
         session.run(
             query,
-            from_name=from_concept.lower().strip(),
-            to_name=to_concept.lower().strip(),
+            from_name=from_canonical,
+            to_name=to_canonical,
         )
 
 
