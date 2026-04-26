@@ -16,17 +16,20 @@ class SourceOut(BaseModel):
     similarity: float          # cosine similarity — stage 1 score
     rerank_score: Optional[float] = None   # cross-encoder score — stage 2
     video_id: Optional[str] = None
+    doc_id: Optional[str] = None
     course_id: Optional[str] = None
     source_url: Optional[str] = None
     start_seconds: Optional[float] = None
     end_seconds: Optional[float] = None
     text: str
+    expanded: bool = False
 
 
 class QueryResponse(BaseModel):
     refused: bool
     reason: Optional[str] = None
     best_similarity: Optional[float] = None
+    rerank_score: Optional[float] = None
     answer: Optional[str] = None
     citations: List[int] = Field(default_factory=list)    
     model: Optional[str] = None 

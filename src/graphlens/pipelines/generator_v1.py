@@ -4,8 +4,11 @@ import os
 import re
 from typing import Any, Dict, List
 
+from dotenv import load_dotenv
 from google import genai
 from google.genai.types import HttpOptions, GenerateContentConfig
+
+load_dotenv()
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +41,7 @@ def _build_prompt(question: str, sources: List[Dict[str, Any]]) -> str:
     evidence_blocks = []
     for i, source in enumerate(sources, 1):
         text = source.get("text", "").strip()
-        start = source.get("start_seconds")
+        start = source.get("start_seconds") or 0
         url = source.get("source_url", "")
         is_pdf = source.get("doc_id") is not None
         loc = f"Page {int(start)}" if is_pdf else f"{int(start)}s"
@@ -105,7 +108,13 @@ def generate_answer(
             ),
         )
 
-        answer_text = response.text.strip()
+        answer_text = (response.text or "").strip()
+        if not answer_text and response.candidates:
+            parts = getattr(response.candidates[0].content, "parts", []) or []
+            answer_text = "".join(getattr(part, "text", "") or "" for part in parts).strip()
+        if not answer_text:
+            raise RuntimeError("Gemini returned an empty answer.")
+
         refused = "don't have enough evidence" in answer_text.lower()
 
         # Extract citation numbers e.g. [1], [2]
@@ -125,7 +134,7 @@ def generate_answer(
         print(f"[generator] Gemini call failed: {e}")
         return {
             "answer": None,
-            "refused": True,
+            "refused": False,
             "citations": [],
             "model": model_name,
             "error": str(e),

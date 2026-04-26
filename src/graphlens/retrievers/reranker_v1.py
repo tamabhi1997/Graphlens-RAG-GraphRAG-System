@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import List, Dict, Any
 
 # Lazy import — model loads only on first call, not at import time
@@ -9,6 +10,10 @@ _RERANKER = None
 def _get_reranker():
     global _RERANKER
     if _RERANKER is None:
+        # The cross-encoder runs on PyTorch. Prevent Transformers from importing
+        # TensorFlow/Keras, which can fail in environments with Keras 3 installed.
+        os.environ.setdefault("USE_TF", "0")
+        os.environ.setdefault("TRANSFORMERS_NO_TF", "1")
         from sentence_transformers import CrossEncoder
         # Lightweight cross-encoder pre-trained on MS MARCO QA dataset
         # Runs on CPU in ~200ms for 20 chunks — no GPU needed
