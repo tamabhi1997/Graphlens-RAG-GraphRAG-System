@@ -4,7 +4,10 @@ import json
 import re
 from typing import Any, Dict, List
 
+from dotenv import load_dotenv
 import spacy
+
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # spaCy model — lazy singleton
@@ -15,7 +18,10 @@ _NLP = None
 def _get_nlp():
     global _NLP
     if _NLP is None:
-        _NLP = spacy.load("en_core_web_sm")
+        try:
+            _NLP = spacy.load("en_core_web_sm")
+        except OSError:
+            _NLP = None
     return _NLP
 
 
@@ -146,6 +152,8 @@ def spacy_extract(chunk_text: str) -> Dict[str, Any]:
     Returns concepts (nodes) and relationships (edges).
     """
     nlp = _get_nlp()
+    if nlp is None:
+        return simple_extract(chunk_text)
 
     # Process in sentence chunks (spaCy works best on sentences)
     doc = nlp(chunk_text[:5000])  # cap at 5000 chars for speed
@@ -157,6 +165,27 @@ def spacy_extract(chunk_text: str) -> Dict[str, Any]:
         "concepts": [{"name": c, "description": ""} for c in concepts],
         "relationships": relationships,
         "method": "spacy",
+    }
+
+
+def simple_extract(chunk_text: str) -> Dict[str, Any]:
+    """Fallback concept extraction when the spaCy English model is unavailable."""
+    words = re.findall(r"\b[a-zA-Z][a-zA-Z-]{3,}\b", chunk_text.lower())
+    stop = {
+        "this", "that", "with", "from", "have", "there", "their", "about",
+        "which", "when", "what", "where", "will", "would", "could", "should",
+        "because", "these", "those", "into", "your", "they", "them",
+    }
+    concepts = []
+    for word in words:
+        if word in stop or not _is_valid_concept(word):
+            continue
+        concepts.append(word)
+    concepts = list(dict.fromkeys(concepts))[:8]
+    return {
+        "concepts": [{"name": c, "description": ""} for c in concepts],
+        "relationships": [],
+        "method": "simple",
     }
 
 
@@ -235,8 +264,10 @@ def extract_entities(chunk_text: str) -> Dict[str, Any]:
     """
     result = spacy_extract(chunk_text)
 
-    # Fall back to LLM if spaCy found no relationships
-    if len(result["relationships"]) == 0:
+    # Fall back to LLM if the full spaCy model found no relationships.
+    # The simple extractor is already a no-dependency fallback and should not
+    # require another network/API dependency to keep GraphRAG usable locally.
+    if result.get("method") != "simple" and len(result["relationships"]) == 0:
         print(f"[entity_extractor] spaCy found no relationships, trying LLM...")
         result = llm_extract(chunk_text)
 

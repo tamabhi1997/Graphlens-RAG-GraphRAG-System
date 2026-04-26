@@ -16,13 +16,26 @@ router = APIRouter()
 def query(req: QueryRequest):
     try:
         if req.use_graph:
-            out = query_v2(
-                question=req.question,
-                scope_type=req.scope_type,
-                scope_id=req.scope_id,
-                collection_name=req.collection_name,
-                use_graph=True,
-            )
+            try:
+                out = query_v2(
+                    question=req.question,
+                    scope_type=req.scope_type,
+                    scope_id=req.scope_id,
+                    collection_name=req.collection_name,
+                    use_graph=True,
+                )
+            except Exception as graph_error:
+                out = query_v1(
+                    question=req.question,
+                    scope_type=req.scope_type,
+                    scope_id=req.scope_id,
+                    collection_name=req.collection_name,
+                )
+                out["graph_expansion"] = {
+                    "expanded_chunks": 0,
+                    "method": "fallback_plain_rag",
+                    "error": str(graph_error),
+                }
         else:
             out = query_v1(
                 question=req.question,

@@ -4,6 +4,7 @@ load_dotenv()
 from graphlens.embeddings.openai_v1 import embed_query
 from graphlens.vectorstores.chroma_v1 import ChromaStore
 from graphlens.retrievers.reranker_v1 import rerank  # NEW
+from graphlens.pipelines.generator_v1 import generate_answer
 
 
 def query_v1(
@@ -74,6 +75,8 @@ def query_v1(
             "refused": True,
             "reason": "No content found for the selected scope.",
             "best_similarity": None,
+            "answer": None,
+            "citations": [],
             "sources": [],
         }
 
@@ -91,13 +94,20 @@ def query_v1(
             "reason": "I don't have enough relevant evidence in the selected content to answer that.",
             "best_similarity": best_sim,
             "rerank_score": sources[0]["rerank_score"] if sources else None,
+            "answer": None,
+            "citations": [],
             "sources": sources[:3],
         }
 
+    generated = generate_answer(question, sources)
+
     return {
-        "refused":      False,
+        "refused":      generated["refused"],
+        "reason":       None,
         "best_similarity": best_sim,
         "rerank_score": sources[0]["rerank_score"],  # expose for debugging
-        "answer":       None,   # Gemini later
+        "answer":       generated["answer"],
+        "citations":    generated["citations"],
+        "model":        generated["model"],
         "sources":      sources,
     }
