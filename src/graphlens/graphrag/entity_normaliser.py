@@ -17,7 +17,10 @@ def _get_nlp():
     global _NLP
     if _NLP is None:
         import spacy
-        _NLP = spacy.load("en_core_web_sm")
+        try:
+            _NLP = spacy.load("en_core_web_sm")
+        except OSError:
+            _NLP = None
     return _NLP
 
 
@@ -102,8 +105,9 @@ def normalise_concept(name: str) -> Optional[str]:
     # Lemmatize — spaCy converts plurals to singular automatically
     # "matrices" → "matrix", "gradients" → "gradient", "neural networks" → "neural network"
     nlp = _get_nlp()
-    doc = nlp(text)
-    text = " ".join(token.lemma_ for token in doc)
+    if nlp is not None:
+        doc = nlp(text)
+        text = " ".join(token.lemma_ for token in doc)
 
     # Collapse whitespace again after lemmatization
     text = _MULTI_SPACE.sub(" ", text).strip()
