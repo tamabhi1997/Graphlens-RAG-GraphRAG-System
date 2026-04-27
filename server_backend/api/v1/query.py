@@ -4,10 +4,7 @@
 
 from fastapi import APIRouter, HTTPException
 from server_backend.schemas.query import QueryRequest, QueryResponse
-from graphlens.pipelines.query_v1 import query_v1
-# from graphlens.pipelines.query_v1 import query_v1
 from graphlens.pipelines.query_v2 import query_v2
-# from graphlens.pipelines.query_v2 import query_v2 as query_v1
 
 
 router = APIRouter()
@@ -25,11 +22,12 @@ def query(req: QueryRequest):
                     use_graph=True,
                 )
             except Exception as graph_error:
-                out = query_v1(
+                out = query_v2(
                     question=req.question,
                     scope_type=req.scope_type,
                     scope_id=req.scope_id,
                     collection_name=req.collection_name,
+                    use_graph=False,
                 )
                 out["graph_expansion"] = {
                     "expanded_chunks": 0,
@@ -37,11 +35,12 @@ def query(req: QueryRequest):
                     "error": str(graph_error),
                 }
         else:
-            out = query_v1(
+            out = query_v2(
                 question=req.question,
                 scope_type=req.scope_type,
                 scope_id=req.scope_id,
                 collection_name=req.collection_name,
+                use_graph=False,
             )
         return QueryResponse(**out)
     except Exception as e:
