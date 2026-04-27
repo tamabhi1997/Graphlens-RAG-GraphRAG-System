@@ -29,6 +29,7 @@ class QueryResponse(BaseModel):
     refused: bool
     reason: Optional[str] = None
     best_similarity: Optional[float] = None
+    confidence: Optional[float] = None
     rerank_score: Optional[float] = None
     answer: Optional[str] = None
     citations: List[int] = Field(default_factory=list)    
