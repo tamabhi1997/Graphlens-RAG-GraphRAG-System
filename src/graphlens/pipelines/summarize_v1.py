@@ -282,7 +282,6 @@ def make_summary_from_chunks(clean_texts: List[str]) -> tuple:
     summary = " ".join(picked_sentences)
     return summary, []
 
-
 def _score_sentence(sentence: str, word_counts: Counter) -> float:
     words = re.findall(r"[a-z][a-z\-]{2,}", sentence.lower())
     content = [w for w in words if w not in STOPWORDS and len(w) >= MIN_WORD_LEN]
