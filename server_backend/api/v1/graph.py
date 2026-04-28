@@ -31,7 +31,7 @@ def get_concept_graph_endpoint(
             scope_id=scope_id,
         )
         return {
-            "concept": concept.strip().lower(),
+            "concept": graph.get("concept") or concept.strip().lower(),
             "nodes": graph["nodes"],
             "edges": graph["edges"],
             "chunks": graph["chunks"],

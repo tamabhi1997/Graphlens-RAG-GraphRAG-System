@@ -7,6 +7,12 @@ from typing import Any
 
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
+
+try:
+    from pyvis.network import Network
+except Exception:
+    Network = None
 
 
 API_BASE_URL = os.getenv("GRAPHLENS_API_BASE_URL", "http://127.0.0.1:8000/api/v1").rstrip("/")
@@ -79,7 +85,9 @@ def init_state() -> None:
         "sources": [],
         "citations": [],
         "graph": None,
+        "graph_concept": None,
         "graph_health": None,
+        "last_question": None,
         "last_error": None,
         "use_graph": False,
         "menu_open": False,
@@ -194,6 +202,8 @@ def clear_session_content() -> None:
         "sources",
         "citations",
         "graph",
+        "graph_concept",
+        "last_question",
         "last_error",
     ):
         st.session_state[key] = None if key not in {"sources", "citations"} else []
@@ -213,6 +223,8 @@ def apply_ingest_response(content_type: str, content_data: Any, content_name: st
     st.session_state.sources = []
     st.session_state.citations = []
     st.session_state.graph = None
+    st.session_state.graph_concept = None
+    st.session_state.last_question = None
     st.session_state.last_error = None
     st.session_state.messages = [
         {
@@ -276,6 +288,8 @@ def load_course_video(video: dict[str, str]) -> None:
     st.session_state.sources = []
     st.session_state.citations = []
     st.session_state.graph = None
+    st.session_state.graph_concept = None
+    st.session_state.last_question = None
     st.session_state.last_error = None
     st.session_state.messages = [
         {
@@ -554,6 +568,34 @@ def render_styles() -> None:
         display: inline-flex; border: 1px solid rgba(6, 182, 212, 0.32); border-radius: 999px;
         padding: 6px 10px; color: #67e8f9; background: rgba(15, 23, 42, 0.72);
         font-size: 0.82rem; margin: 0 6px 6px 0;
+    }
+    .graph-shell {
+        height: 520px; border: 1px solid rgba(56, 189, 248, 0.16); border-radius: 8px;
+        overflow: hidden; background: rgba(2, 6, 23, 0.62);
+    }
+    .graph-fallback {
+        min-height: 220px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+        gap: 12px; padding: 18px; background: rgba(2, 6, 23, 0.42); border-radius: 8px;
+    }
+    .graph-node-pill {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 92px; max-width: 210px; min-height: 42px; padding: 8px 12px;
+        border-radius: 999px; border: 1px solid rgba(56, 189, 248, 0.28);
+        background: rgba(15, 23, 42, 0.88); color: #e2e8f0; font-weight: 800;
+        text-align: center; font-size: 0.83rem;
+    }
+    .graph-node-center {
+        min-width: 126px; min-height: 54px; background: rgba(6, 182, 212, 0.22);
+        border-color: rgba(34, 211, 238, 0.72); color: #cffafe;
+    }
+    .chunk-link-card {
+        border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 8px;
+        padding: 10px 12px; margin: 8px 0; background: rgba(2, 6, 23, 0.3);
+    }
+    .graph-empty {
+        border: 1px dashed rgba(148, 163, 184, 0.28); border-radius: 8px;
+        min-height: 180px; display: flex; align-items: center; justify-content: center;
+        color: #94a3b8; background: rgba(2, 6, 23, 0.26); text-align: center; padding: 18px;
     }
     .confidence-badge {
         display: inline-flex; align-items: center; gap: 7px; border-radius: 999px;
@@ -1041,6 +1083,68 @@ def parse_topic(topic: str) -> tuple[str, str | None]:
     return name.strip(), description.strip()
 
 
+GRAPH_STOP_WORDS = {
+    "about",
+    "after",
+    "also",
+    "answer",
+    "are",
+    "can",
+    "could",
+    "does",
+    "explain",
+    "for",
+    "from",
+    "give",
+    "how",
+    "into",
+    "is",
+    "me",
+    "of",
+    "show",
+    "tell",
+    "the",
+    "this",
+    "to",
+    "what",
+    "when",
+    "where",
+    "why",
+    "with",
+    "work",
+    "works",
+}
+
+
+def clean_graph_concept(value: Any) -> str:
+    text = re.sub(r"[^a-zA-Z0-9\s_-]+", " ", str(value or "").lower())
+    words = [word for word in text.split() if word not in GRAPH_STOP_WORDS]
+    return " ".join(words[:4]).strip()
+
+
+def graph_concept_candidates() -> list[str]:
+    candidates: list[str] = []
+    if st.session_state.graph_concept:
+        candidates.append(str(st.session_state.graph_concept))
+    if st.session_state.last_question:
+        candidates.append(clean_graph_concept(st.session_state.last_question))
+    for topic in st.session_state.key_topics:
+        name, _ = parse_topic(str(topic))
+        candidates.append(clean_graph_concept(name))
+
+    unique = []
+    for candidate in candidates:
+        candidate = candidate.strip()
+        if len(candidate) >= 2 and candidate not in unique:
+            unique.append(candidate)
+    return unique
+
+
+def current_graph_concept() -> str:
+    candidates = graph_concept_candidates()
+    return candidates[0] if candidates else ""
+
+
 def render_content_preview() -> None:
     if st.session_state.content_type in {"youtube", "course"}:
         st.video(st.session_state.content_data)
@@ -1097,15 +1201,167 @@ def render_summary() -> None:
         st.markdown(f'<div class="topics-list">{"".join(topic_items)}</div>', unsafe_allow_html=True)
 
 
+def graph_chunk_label(chunk: dict[str, Any]) -> str:
+    source_url = str(chunk.get("source_url") or "")
+    marker = chunk.get("start_seconds")
+    is_pdf = source_url.lower().endswith(".pdf") or st.session_state.content_type == "pdf"
+    if marker is None:
+        return source_url or chunk.get("chunk_id", "Source")
+    if is_pdf:
+        return f"{source_url or 'Document'} - Page {int(float(marker))}"
+    return f"{source_url or 'Video'} - {format_timestamp(marker)}"
+
+
+def graph_chunk_url(chunk: dict[str, Any]) -> str | None:
+    source_url = str(chunk.get("source_url") or "")
+    marker = chunk.get("start_seconds")
+    if not source_url or source_url.lower().endswith(".pdf"):
+        return None
+    if "youtube.com" in source_url or "youtu.be" in source_url:
+        if marker is None:
+            return source_url
+        separator = "&" if "?" in source_url else "?"
+        return f"{source_url}{separator}t={int(float(marker))}"
+    return source_url
+
+
+def render_graph_visualization(graph: dict[str, Any]) -> None:
+    nodes = graph.get("nodes", [])
+    edges = graph.get("edges", [])
+    if not nodes:
+        concept = html.escape(str(graph.get("concept") or st.session_state.graph_concept or "this concept"))
+        st.markdown(
+            f'<div class="graph-empty">No graph nodes found for <strong>{concept}</strong>. Try a shorter concept such as "neural network" or a suggested topic.</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    if Network is None:
+        pills = []
+        for node in nodes:
+            label = html.escape(str(node.get("name") or "Concept"))
+            class_name = "graph-node-pill graph-node-center" if node.get("type") == "center" else "graph-node-pill"
+            pills.append(f'<span class="{class_name}">{label}</span>')
+        st.markdown(f'<div class="graph-fallback">{"".join(pills)}</div>', unsafe_allow_html=True)
+        return
+
+    net = Network(
+        height="520px",
+        width="100%",
+        bgcolor="#020817",
+        font_color="#e2e8f0",
+        directed=True,
+        cdn_resources="in_line",
+    )
+    net.force_atlas_2based(
+        gravity=-64,
+        central_gravity=0.018,
+        spring_length=170,
+        spring_strength=0.08,
+        damping=0.55,
+    )
+    center_name = ""
+    for node in nodes:
+        name = str(node.get("name") or "")
+        if not name:
+            continue
+        is_center = node.get("type") == "center"
+        if is_center:
+            center_name = name
+        net.add_node(
+            name,
+            label=name,
+            title=name,
+            color={
+                "background": "#06b6d4" if is_center else "#132238",
+                "border": "#a5f3fc" if is_center else "#38bdf8",
+                "highlight": {"background": "#22d3ee", "border": "#e0f2fe"},
+            },
+            borderWidth=3 if is_center else 1,
+            size=42 if is_center else 27,
+            font={"size": 22 if is_center else 16, "face": "Inter", "color": "#f8fafc", "strokeWidth": 0},
+        )
+    center_name = center_name or str(nodes[0].get("name") or "")
+    for edge in edges:
+        source = edge.get("from") or edge.get("source")
+        target = edge.get("to") or edge.get("target")
+        if source and target:
+            relation = str(edge.get("type") or "RELATES_TO")
+            net.add_edge(
+                str(source),
+                str(target),
+                label=relation,
+                title=relation,
+                color={"color": "#38bdf8", "highlight": "#67e8f9", "opacity": 0.72},
+                width=2,
+                arrows={"to": {"enabled": True, "scaleFactor": 0.55}},
+            )
+    net.set_options(
+        """
+        var options = {
+          "nodes": {
+            "shape": "dot",
+            "shadow": {"enabled": true, "color": "rgba(34,211,238,0.22)", "size": 14, "x": 0, "y": 0}
+          },
+          "edges": {
+            "smooth": {"type": "continuous", "roundness": 0.35},
+            "font": {"size": 12, "color": "#93c5fd", "strokeWidth": 0, "align": "middle"}
+          },
+          "interaction": {
+            "hover": true,
+            "tooltipDelay": 80,
+            "navigationButtons": true,
+            "keyboard": true,
+            "dragNodes": true
+          },
+          "physics": {
+            "enabled": true,
+            "solver": "forceAtlas2Based",
+            "stabilization": {"enabled": true, "iterations": 220, "fit": true}
+          }
+        }
+        """
+    )
+    components.html(net.generate_html(notebook=False), height=540, scrolling=False)
+
+
 def render_graph_panel() -> None:
-    if st.button("Load graph", type="primary", use_container_width=True):
-        with st.spinner("Building graph view..."):
-            load_graph()
-        st.rerun()
+    if not st.session_state.sources and not st.session_state.last_question:
+        st.caption("Ask a question first so GraphLens can center the concept map on your query.")
+        return
+
+    candidates = graph_concept_candidates()
+    default_concept = current_graph_concept()
+    concept = st.text_input(
+        "Concept",
+        value=default_concept,
+        placeholder="gradient descent",
+        help="Use a key topic from the answer or the concept you want to explore.",
+        key="graph_concept_input",
+    )
+    load_col, health_col = st.columns([0.7, 0.3])
+    with load_col:
+        if st.button("Load concept map", type="primary", use_container_width=True):
+            with st.spinner("Fetching concept graph..."):
+                load_graph(concept)
+            st.rerun()
+    with health_col:
+        status = "Neo4j connected" if st.session_state.graph_health and st.session_state.graph_health.get("neo4j") == "connected" else "Neo4j unavailable"
+        st.caption(status)
+
+    if candidates:
+        st.caption("Suggestions")
+        cols = st.columns(min(3, len(candidates)))
+        for index, candidate in enumerate(candidates[:6]):
+            with cols[index % len(cols)]:
+                if st.button(candidate, key=f"graph_candidate_{index}_{hashlib.md5(candidate.encode()).hexdigest()[:8]}", use_container_width=True):
+                    with st.spinner("Fetching concept graph..."):
+                        load_graph(candidate)
+                    st.rerun()
 
     graph = st.session_state.graph
     if not graph:
-        st.caption("Load the graph after asking a question so GraphLens can center it on retrieved source context.")
+        st.caption("Load the concept map to render related concepts and source links.")
         return
     if graph.get("error"):
         st.warning(graph["error"])
@@ -1116,32 +1372,50 @@ def render_graph_panel() -> None:
     st.markdown(
         f"""
         <div class="metric-strip">
+            <span class="metric-pill">{html.escape(str(graph.get("concept") or st.session_state.graph_concept or concept))}</span>
             <span class="metric-pill">{node_count} nodes</span>
             <span class="metric-pill">{edge_count} edges</span>
         </div>
         """,
         unsafe_allow_html=True,
     )
+    render_graph_visualization(graph)
+    if graph.get("nodes") and not graph.get("edges"):
+        st.caption("The API returned the center concept but no related concept edges for this topic.")
 
-    nodes = graph.get("nodes", [])[:12]
-    edges = graph.get("edges", [])[:12]
-    if nodes:
-        st.markdown("**Concepts**")
-        for node in nodes:
-            label = node.get("label") or node.get("name") or node.get("id") or "Concept"
-            st.markdown(f'<span class="topic-chip">{html.escape(str(label))}</span>', unsafe_allow_html=True)
-    if edges:
-        st.markdown("**Relationships**")
-        for edge in edges:
-            source = edge.get("source") or edge.get("from") or edge.get("start") or ""
-            target = edge.get("target") or edge.get("to") or edge.get("end") or ""
-            relation = edge.get("type") or edge.get("label") or "related to"
-            st.caption(f"{source} - {relation} - {target}")
+    neighbor_nodes = [node for node in graph.get("nodes", []) if node.get("type") != "center" and node.get("name")]
+    if neighbor_nodes:
+        st.caption("Re-center")
+        cols = st.columns(min(4, len(neighbor_nodes)))
+        for index, node in enumerate(neighbor_nodes[:8]):
+            name = str(node["name"])
+            with cols[index % len(cols)]:
+                if st.button(name, key=f"graph_recenter_{index}_{hashlib.md5(name.encode()).hexdigest()[:8]}", use_container_width=True):
+                    with st.spinner("Fetching concept graph..."):
+                        load_graph(name)
+                    st.rerun()
+
+    chunks = [chunk for chunk in graph.get("chunks", []) if chunk and chunk.get("chunk_id")]
+    if chunks:
+        st.markdown("**Source Links**")
+        for chunk in chunks[:6]:
+            label = html.escape(graph_chunk_label(chunk))
+            chunk_id = html.escape(str(chunk.get("chunk_id", "")))
+            st.markdown(
+                f'<div class="chunk-link-card"><div>{label}</div><div class="source-meta">{chunk_id}</div></div>',
+                unsafe_allow_html=True,
+            )
+            url = graph_chunk_url(chunk)
+            if url:
+                st.link_button("Open timestamp", url)
 
 
 def submit_query(prompt: str) -> None:
     try:
         graph_available = st.session_state.graph_health and st.session_state.graph_health.get("neo4j") == "connected"
+        st.session_state.last_question = prompt
+        st.session_state.graph_concept = clean_graph_concept(prompt)
+        st.session_state.graph = None
         response = post_json(
             "/query",
             {
@@ -1180,14 +1454,18 @@ def submit_query(prompt: str) -> None:
         st.session_state.messages.append({"role": "assistant", "content": f"Query failed: {exc}", "refused": True})
 
 
-def load_graph() -> None:
-    if not st.session_state.sources:
+def load_graph(concept: str | None = None) -> None:
+    if not st.session_state.sources and not st.session_state.last_question:
         st.warning("Ask a question first so GraphLens has source context.")
         return
-    text = st.session_state.sources[0].get("text", "")
-    concept = " ".join(text.split()[:3]).strip(".,:;") or st.session_state.scope_id
+    concept = clean_graph_concept(concept) or current_graph_concept()
+    if not concept:
+        st.warning("Enter a concept to visualize.")
+        return
     try:
-        st.session_state.graph = get_json("/graph/concept", {"concept": concept, "scope_id": st.session_state.scope_id})
+        st.session_state.graph_concept = concept
+        graph = get_json("/graph/concept", {"concept": concept, "scope_id": st.session_state.scope_id})
+        st.session_state.graph = graph
     except Exception as exc:
         st.session_state.graph = {"error": str(exc)}
 
@@ -1205,7 +1483,7 @@ def render_learning_session() -> None:
     with left_col:
         render_content_preview()
         st.write("")
-        tab1, tab2, tab3 = st.tabs(["Summary", "Sources", "View Graph"])
+        tab1, tab2, tab3 = st.tabs(["Summary", "Sources", "Concept Map"])
         with tab1:
             with st.container(height=330, border=True):
                 render_summary()
@@ -1222,7 +1500,7 @@ def render_learning_session() -> None:
                 else:
                     st.caption("Sources will appear after a query.")
         with tab3:
-            with st.container(height=245, border=True):
+            with st.container(height=780, border=True):
                 render_graph_panel()
 
     with right_col:

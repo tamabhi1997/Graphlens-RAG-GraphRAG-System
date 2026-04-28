@@ -126,8 +126,12 @@ class ReliabilityModel:
         if self.scaler is not None:
             X = self.scaler.transform(X)
 
-        prob = self.clf.predict_proba(X)[0][1]
-        return float(round(prob, 4))
+        try:
+            prob = self.clf.predict_proba(X)[0][1]
+            return float(round(prob, 4))
+        except Exception as exc:
+            print(f"[reliability] model inference failed, using heuristic fallback: {exc}")
+            return self._heuristic_score(query_response)
 
     def predict_with_explanation(self, query_response: Dict[str, Any]) -> Dict[str, Any]:
         """Predict confidence + show which features drove the score."""
@@ -140,7 +144,14 @@ class ReliabilityModel:
         features = extract_features(query_response)
         X = features_to_vector(features).reshape(1, -1)
         X_scaled = self.scaler.transform(X) if self.scaler else X
-        prob = float(self.clf.predict_proba(X_scaled)[0][1])
+        try:
+            prob = float(self.clf.predict_proba(X_scaled)[0][1])
+        except Exception as exc:
+            return {
+                "confidence": self._heuristic_score(query_response),
+                "explanation": f"heuristic fallback — trained model inference failed: {exc}",
+                "feature_values": {k: round(v, 4) for k, v in features.items()},
+            }
 
         contributions = {
             name: float(round(self.clf.coef_[0][i] * X_scaled[0][i], 4))
