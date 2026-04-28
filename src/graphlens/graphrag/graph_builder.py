@@ -55,6 +55,8 @@ def build_graph_for_chunk(
         start_seconds=float(metadata.get("start_seconds", 0.0)),
         end_seconds=float(metadata.get("end_seconds", 0.0)),
         scope_type=metadata.get("scope_type", "video"),
+        course_id=metadata.get("course_id", ""),
+        doc_id=metadata.get("doc_id", ""),
     )
 
     # --- Extract entities ---
