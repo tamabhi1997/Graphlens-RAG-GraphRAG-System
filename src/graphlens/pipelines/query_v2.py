@@ -11,17 +11,13 @@ from graphlens.graphrag.graph_builder import build_graph_for_chunks
 from graphlens.pipelines.generator_v1 import generate_answer
 from graphlens.pipelines.reliability_model import ReliabilityModel
 
-# ---------------------------------------------------------------------------
-# Lazy singleton — reliability model loaded once, reused across all queries
-# ---------------------------------------------------------------------------
 
-_RELIABILITY_MODEL = None
+_RELIABILITY_MODEL = ReliabilityModel.load()
+
+# _RELIABILITY_MODEL = None
 
 
 def _get_reliability_model() -> ReliabilityModel:
-    global _RELIABILITY_MODEL
-    if _RELIABILITY_MODEL is None:
-        _RELIABILITY_MODEL = ReliabilityModel.load()
     return _RELIABILITY_MODEL
 
 
@@ -142,6 +138,13 @@ def query_v2(
     }
 
     # 10) Reliability score
-    response["confidence"] = _get_reliability_model().predict(response)
+    # 10) Reliability score
+    try:
+        conf = _get_reliability_model().predict(response)
+        print(f"[reliability] confidence={conf}, refused={response.get('refused')}, sources={len(response.get('sources',[]))}")
+        response["confidence"] = conf
+    except Exception as e:
+        print(f"[reliability] FAILED: {e}")
+        response["confidence"] = None
 
     return response

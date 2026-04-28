@@ -59,7 +59,9 @@ STRICT RULES:
 3. Answer as thoroughly as the evidence allows. Explain the concept 
    fully and clearly. If the evidence supports a detailed explanation, 
    provide one. Let the depth of the evidence determine your answer length.
-4. After your answer, cite which passages you used, e.g. [1], [2].
+4. You MUST end your answer with citations in this exact format: [1], [2], [3]
+   where each number refers to the evidence passage you used. This is mandatory
+   — never omit citations even if the answer seems obvious.
 5. Never fabricate facts not present in the evidence.
 
 QUESTION:
@@ -103,8 +105,7 @@ def generate_answer(
             model=model_name,
             contents=prompt,
             config=GenerateContentConfig(
-                temperature=temperature,
-                max_output_tokens=1024,
+                temperature=temperature
             ),
         )
 
