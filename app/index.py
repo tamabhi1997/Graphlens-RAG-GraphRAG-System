@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import html
 import os
 import re
@@ -89,6 +90,13 @@ def init_state() -> None:
         "signed_in": False,
         "user_name": None,
         "user_email": None,
+        "user_first_name": None,
+        "user_last_name": None,
+        "user_password_hash": None,
+        "open_signup": False,
+        "open_signin": False,
+        "open_link_dialog": False,
+        "open_pdf_dialog": False,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -96,8 +104,9 @@ def init_state() -> None:
 
 init_state()
 
-if st.query_params.get("page") == "home":
-    st.session_state.page = "home"
+page_param = st.query_params.get("page")
+if page_param in {"home", "course"}:
+    st.session_state.page = page_param
     st.query_params.clear()
 
 
@@ -208,7 +217,7 @@ def apply_ingest_response(content_type: str, content_data: Any, content_name: st
     st.session_state.messages = [
         {
             "role": "assistant",
-            "content": "Indexing is complete. Ask a question about the selected source.",
+            "content": "Quench your curiosity.",
         }
     ]
     navigate_to("session")
@@ -271,7 +280,7 @@ def load_course_video(video: dict[str, str]) -> None:
     st.session_state.messages = [
         {
             "role": "assistant",
-            "content": "Course lecture loaded. Ask a question across the MIT deep learning course.",
+            "content": "Quench your curiosity.",
         }
     ]
     navigate_to("session")
@@ -285,7 +294,7 @@ def link_url_dialog() -> None:
         if not url.strip():
             st.warning("Enter a YouTube URL first.")
             return
-        with st.spinner("Indexing video. Longer videos can take a minute."):
+        with st.spinner("Loading..."):
             try:
                 response = post_json(
                     "/youtube/index",
@@ -309,7 +318,7 @@ def upload_pdf_dialog() -> None:
         if not uploaded_file:
             st.warning("Choose a PDF first.")
             return
-        with st.spinner("Indexing PDF. Large files can take a minute or more."):
+        with st.spinner("Loading..."):
             try:
                 response = post_pdf(uploaded_file)
                 apply_ingest_response("pdf", uploaded_file, uploaded_file.name, response)
@@ -330,6 +339,31 @@ def render_styles() -> None:
         max-width: 100% !important;
     }
     header { visibility: hidden; }
+    /* Sticky app bar — only the row that contains the GraphLens logo (not drawer/column splits). */
+    div[data-testid="stHorizontalBlock"]:has(div.header-logo) {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 1005 !important;
+        margin-left: calc(-2rem + 6px);
+        margin-right: calc(-2rem + 6px);
+        padding: 10px calc(2rem - 6px) 12px calc(2rem - 6px);
+        margin-bottom: 0 !important;
+        background: linear-gradient(180deg, rgba(2, 8, 23, 0.97) 0%, rgba(7, 17, 31, 0.95) 100%) !important;
+        backdrop-filter: blur(14px);
+        border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+        box-shadow: 0 8px 28px rgba(2, 6, 23, 0.35);
+    }
+    @media (max-width: 900px) {
+        div[data-testid="stHorizontalBlock"]:has(div.header-logo) {
+            margin-left: calc(-1rem + 6px);
+            margin-right: calc(-1rem + 6px);
+            padding-left: calc(1rem - 6px);
+            padding-right: calc(1rem - 6px);
+        }
+    }
+    section[data-testid="stMain"] {
+        scroll-padding-top: 5.5rem;
+    }
     .stApp {
         background:
             radial-gradient(circle at 15% 0%, rgba(14, 165, 233, 0.16), transparent 24rem),
@@ -337,11 +371,13 @@ def render_styles() -> None:
             linear-gradient(180deg, #020817 0%, #07111f 48%, #08111d 100%);
         color: #f8fafc; font-family: Inter, sans-serif;
     }
+    /* Hide built-in Streamlit sidebar; navigation uses the hamburger drawer column instead. */
     section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #172a43 0%, #10243c 100%) !important;
-        border-right: 1px solid rgba(148, 163, 184, 0.12);
+        display: none !important;
     }
-    section[data-testid="stSidebar"] h3 { font-size: 1.65rem; margin-bottom: 2rem; }
+    [data-testid="collapsedControl"] {
+        display: none !important;
+    }
     .header-logo { display: flex; align-items: center; gap: 12px; min-height: 56px; }
     .hamburger { font-size: 26px; color: #7dd3fc; cursor: pointer; margin-right: 10px; }
     .g-box {
@@ -351,7 +387,7 @@ def render_styles() -> None:
         font-weight: 850; font-size: 26px; box-shadow: 0 14px 34px rgba(37, 99, 235, 0.26);
     }
     .brand { font-size: 25px; font-weight: 800; color: white; }
-    .custom-divider { margin: 8px 0 0; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
+    .custom-divider { display: none; }
     .signin-pill {
         float: right; display: inline-flex; align-items: center; justify-content: center;
         min-width: 116px; height: 44px; border-radius: 999px; padding: 0 18px;
@@ -406,7 +442,14 @@ def render_styles() -> None:
         display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr); gap: 24px; align-items: center;
         box-shadow: 0 26px 80px rgba(2, 6, 23, 0.24);
     }
-    .course-title { color: #f8fafc; font-size: clamp(1.6rem, 2.2vw, 2.1rem); font-weight: 850; margin: 0.2rem 0 0.55rem; }
+    .course-title {
+        color: #f8fafc; font-size: clamp(1.6rem, 2.2vw, 2.1rem); font-weight: 850;
+        margin: 0.2rem 0 0.55rem; display: inline-block; text-decoration: none;
+        transition: color 0.2s ease, text-shadow 0.2s ease;
+    }
+    .course-title:hover {
+        color: #67e8f9; text-shadow: 0 0 16px rgba(34, 211, 238, 0.3);
+    }
     .course-copy { color: #cbd5e1; line-height: 1.6; max-width: 720px; }
     .course-stat-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 1rem; }
     .course-stat {
@@ -417,22 +460,34 @@ def render_styles() -> None:
         max-width: 1180px; margin: 1.5rem auto 1rem; display: flex; justify-content: space-between;
         gap: 16px; align-items: flex-end;
     }
+    .st-key-course_prepare button[kind="secondary"] {
+        background: rgba(15, 23, 42, 0.48) !important;
+        border: 0 !important;
+        color: #67e8f9 !important;
+        font-weight: 800 !important;
+    }
+    .st-key-course_prepare button[kind="secondary"]:hover {
+        background: rgba(8, 47, 73, 0.32) !important;
+        color: #a5f3fc !important;
+    }
     .lecture-card {
         border: 1px solid rgba(56, 189, 248, 0.18); border-radius: 8px; overflow: hidden;
         background: rgba(15, 23, 42, 0.72); min-height: 402px;
+        display: flex; flex-direction: column; height: 100%;
         box-shadow: 0 18px 48px rgba(2, 6, 23, 0.2);
     }
     .lecture-thumb {
         width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block;
         border-bottom: 1px solid rgba(148, 163, 184, 0.16);
     }
-    .lecture-body { padding: 14px; }
+    .lecture-body { padding: 14px; display: flex; flex-direction: column; flex: 1; }
     .lecture-kicker { color: #67e8f9; font-size: 0.78rem; font-weight: 850; text-transform: uppercase; }
-    .lecture-title { color: #f8fafc; font-size: 1.03rem; line-height: 1.28; font-weight: 850; margin: 7px 0; }
+    .lecture-title { color: #f8fafc; font-size: 1.03rem; line-height: 1.28; font-weight: 850; margin: 7px 0; min-height: 2.65rem; }
     .lecture-desc { color: #9ca3af; font-size: 0.88rem; line-height: 1.45; min-height: 76px; }
     .lecture-summary {
-        color: #cbd5e1; font-size: 0.84rem; line-height: 1.45; margin-top: 10px;
+        color: #cbd5e1; font-size: 0.84rem; line-height: 1.45; margin-top: auto;
         border-top: 1px solid rgba(148, 163, 184, 0.14); padding-top: 10px;
+        min-height: 4.8rem;
     }
     .course-thumb-stack { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .course-thumb-stack img {
@@ -527,6 +582,33 @@ def render_styles() -> None:
     .placeholder-title { color: #9ca3af; font-size: 1.25rem; font-weight: 800; margin-top: 0.8rem; }
     .placeholder-subtitle { color: #6b7280; font-weight: 650; margin-top: 0.7rem; max-width: 520px; }
     .chat-title { font-size: 1.45rem; font-weight: 850; margin-bottom: 8px; }
+    /* Chat composer: single row, arrow submit flush with input */
+    div[data-testid="stForm"]:has(.st-key-query_send_arrow) {
+        padding: 10px 12px 12px !important;
+        margin: 0 !important;
+        border-top: 1px solid rgba(148, 163, 184, 0.16) !important;
+        background: rgba(10, 18, 32, 0.98) !important;
+    }
+    div[data-testid="stForm"]:has(.st-key-query_send_arrow) div[data-testid="stHorizontalBlock"] {
+        gap: 0 !important;
+        align-items: flex-end !important;
+    }
+    div[data-testid="stForm"]:has(.st-key-query_send_arrow) div[data-testid="stTextInput"] input {
+        border-radius: 14px 0 0 14px !important;
+        border-right: none !important;
+    }
+    div[data-testid="stForm"]:has(.st-key-query_send_arrow) div[data-testid="stTextInput"] {
+        margin-bottom: 0 !important;
+    }
+    .st-key-query_send_arrow button[kind="primary"] {
+        border-radius: 0 14px 14px 0 !important;
+        min-width: 52px !important;
+        min-height: 48px !important;
+        height: 48px !important;
+        font-size: 1.35rem !important;
+        font-weight: 800 !important;
+        padding: 0 10px !important;
+    }
     div[data-testid="stForm"] {
         padding: 18px 18px 20px !important;
         margin-top: 1rem !important;
@@ -546,19 +628,32 @@ def render_styles() -> None:
     .stTabs [data-baseweb="tab-list"] { gap: 0; background: rgba(15, 23, 42, 0.68); border-radius: 8px 8px 0 0; overflow: hidden; }
     .stTabs [data-baseweb="tab"] { flex: 1; height: 58px; color: #9ca3af; font-weight: 800; }
     .stTabs [aria-selected="true"] { color: #22d3ee !important; border-bottom: 3px solid #06b6d4; background: rgba(8, 47, 73, 0.38); }
-    .menu-overlay {
-        position: fixed; top: 96px; left: 2rem; width: min(380px, calc(100vw - 2rem));
-        max-height: calc(100vh - 122px); overflow: auto; z-index: 9999;
-        background: rgba(8, 18, 32, 0.96); border: 1px solid rgba(56, 189, 248, 0.22);
-        border-radius: 8px; padding: 22px; box-shadow: 0 28px 90px rgba(0,0,0,0.5);
-        backdrop-filter: blur(14px);
+    .auth-switch {
+        text-align: center; color: #64748b; font-size: 0.82rem;
+        margin: 10px 0 4px; letter-spacing: 0.01em;
     }
-    .menu-title { display: flex; justify-content: space-between; align-items: center; font-size: 1.5rem; font-weight: 850; margin-bottom: 1rem; }
-    .menu-item { color: #f8fafc; font-size: 1.18rem; font-weight: 750; margin: 1.6rem 0; }
-    .menu-health { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.12); color: #cbd5e1; }
-    .menu-overlay-scrim {
-        position: fixed; inset: 0; z-index: 9998; background: rgba(2, 6, 23, 0.18);
-        pointer-events: none;
+    /* make the header sign-in button compact and pill-shaped */
+    div[data-testid="column"]:last-child button[kind="secondary"] {
+        min-height: 2.4rem !important;
+        height: 2.4rem !important;
+        font-size: 0.88rem !important;
+        border-radius: 999px !important;
+        padding: 0 14px !important;
+    }
+    /* "Create an account" / "Sign in instead" buttons inside dialogs */
+    div[data-testid="stDialog"] button[kind="secondary"] {
+        background: transparent !important;
+        border: 1px solid rgba(56, 189, 248, 0.22) !important;
+        color: #7dd3fc !important;
+        font-size: 0.85rem !important;
+        min-height: 2.4rem !important;
+        height: 2.4rem !important;
+        border-radius: 999px !important;
+    }
+    div[data-testid="stDialog"] button[kind="secondary"]:hover {
+        background: rgba(56, 189, 248, 0.08) !important;
+        border-color: rgba(56, 189, 248, 0.44) !important;
+        color: #bae6fd !important;
     }
     @media (max-width: 900px) {
         .block-container { padding: 1rem 1rem 2rem !important; }
@@ -575,30 +670,55 @@ def render_styles() -> None:
 render_styles()
 
 
-with st.sidebar:
-    st.markdown("### Menu")
-    st.button("Home", use_container_width=True, on_click=lambda: navigate_to("home"))
-    st.button("MIT Course", use_container_width=True, on_click=lambda: navigate_to("course"))
-    st.markdown("---")
-    st.caption(f"API: {API_BASE_URL}")
-    if st.button("Check API Health", use_container_width=True):
-        try:
-            get_json("/graph/health", timeout=8)
-            st.session_state.graph_health = {"neo4j": "connected"}
-            st.success("Neo4j connected")
-        except Exception as exc:
-            st.session_state.graph_health = {"detail": str(exc)}
-            st.warning("Neo4j unavailable")
-    if st.button("Reset session", use_container_width=True):
-        clear_session_content()
-        navigate_to("home")
+def render_nav_drawer() -> None:
+    with st.container(border=True):
+        head_a, head_b = st.columns([0.82, 0.18])
+        with head_a:
+            st.markdown("### Menu")
+        with head_b:
+            if st.button("✕", key="nav_drawer_close", help="Close menu"):
+                st.session_state.menu_open = False
+                st.rerun()
+        if st.button("Home", key="nav_drawer_home", use_container_width=True):
+            st.session_state.menu_open = False
+            navigate_to("home")
+        if st.button("MIT Course", key="nav_drawer_course", use_container_width=True):
+            st.session_state.menu_open = False
+            navigate_to("course")
+        st.caption("Add content")
+        if st.button("🔗 Link URL", key="nav_drawer_link_url", use_container_width=True):
+            st.session_state.open_link_dialog = True
+            st.rerun()
+        if st.button("📄 Upload PDF", key="nav_drawer_upload_pdf", use_container_width=True):
+            st.session_state.open_pdf_dialog = True
+            st.rerun()
+        st.markdown("---")
+        st.caption(f"API: {API_BASE_URL}")
+        if st.button("Check API Health", key="nav_drawer_health", use_container_width=True):
+            try:
+                get_json("/graph/health", timeout=8)
+                st.session_state.graph_health = {"neo4j": "connected"}
+                st.success("Neo4j connected")
+            except Exception as exc:
+                st.session_state.graph_health = {"detail": str(exc)}
+                st.warning("Neo4j unavailable")
+        if st.button("Reset session", key="nav_drawer_reset", use_container_width=True):
+            clear_session_content()
+            st.session_state.menu_open = False
+            navigate_to("home")
+        if st.session_state.graph_health:
+            if st.session_state.graph_health.get("neo4j") == "connected":
+                st.caption("Status: Neo4j connected")
+            else:
+                st.caption("Status: Neo4j unavailable")
 
 
 def render_header() -> None:
-    menu_col, brand_col, head_col2 = st.columns([0.04, 0.72, 0.24])
+    menu_col, brand_col, head_col2 = st.columns([0.04, 0.82, 0.14])
     with menu_col:
-        if st.button("☰", key="menu_toggle", help="Menu"):
-            menu_dialog()
+        if st.button("☰", key="menu_toggle", help="Toggle menu"):
+            st.session_state.menu_open = not bool(st.session_state.get("menu_open"))
+            st.rerun()
     with brand_col:
         st.markdown(
             """
@@ -628,17 +748,31 @@ def render_header() -> None:
                 st.session_state.signed_in = False
                 st.session_state.user_name = None
                 st.session_state.user_email = None
+                st.session_state.user_first_name = None
+                st.session_state.user_last_name = None
+                st.session_state.user_password_hash = None
                 st.rerun()
         elif st.button("Sign in", key="header_signin", use_container_width=True):
             sign_in_dialog()
-    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+    if st.session_state.get("open_signup"):
+        st.session_state.open_signup = False
+        sign_up_dialog()
+    if st.session_state.get("open_signin"):
+        st.session_state.open_signin = False
+        sign_in_dialog()
+    if st.session_state.get("open_link_dialog"):
+        st.session_state.open_link_dialog = False
+        link_url_dialog()
+    if st.session_state.get("open_pdf_dialog"):
+        st.session_state.open_pdf_dialog = False
+        upload_pdf_dialog()
 
 
 @st.dialog("Sign in")
 def sign_in_dialog() -> None:
-    st.caption("Use a display name and email for this local GraphLens session.")
+    st.caption("Welcome back — enter your details to continue.")
     with st.form("sign_in_form", clear_on_submit=False):
-        name = st.text_input("Name", placeholder="Prathamesh")
+        name = st.text_input("Name", placeholder="Jane Doe")
         email = st.text_input("Email", placeholder="you@example.com")
         submitted = st.form_submit_button("Sign in", type="primary", use_container_width=True)
         if submitted:
@@ -652,27 +786,62 @@ def sign_in_dialog() -> None:
             st.session_state.user_name = name.strip()
             st.session_state.user_email = email.strip()
             st.rerun()
+    st.markdown(
+        '<p class="auth-switch">New here?</p>',
+        unsafe_allow_html=True,
+    )
+    if st.button("Create an account →", key="signin_to_signup", use_container_width=True):
+        st.session_state.open_signup = True
+        st.rerun()
 
 
-@st.dialog("Menu")
-def menu_dialog() -> None:
-    if st.button("Home", key="menu_home", use_container_width=True):
-        navigate_to("home")
-    if st.button("MIT Course", key="menu_course", use_container_width=True):
-        navigate_to("course")
-    st.markdown("---")
-    st.caption(f"API: {API_BASE_URL}")
-    if st.button("Check API Health", key="menu_api_health", use_container_width=True):
-        refresh_graph_health()
-        if st.session_state.graph_health and st.session_state.graph_health.get("neo4j") == "connected":
-            st.success("Neo4j connected")
-        else:
-            st.warning("Neo4j unavailable")
-    if st.session_state.graph_health:
-        if st.session_state.graph_health.get("neo4j") == "connected":
-            st.caption("Status: Neo4j connected")
-        else:
-            st.caption("Status: Neo4j unavailable")
+@st.dialog("Create Account")
+def sign_up_dialog() -> None:
+    st.caption("Join GraphLens — takes less than a minute.")
+    with st.form("sign_up_form", clear_on_submit=False):
+        col_a, col_b = st.columns(2)
+        with col_a:
+            first_name = st.text_input("First name", placeholder="Jane")
+        with col_b:
+            last_name = st.text_input("Last name", placeholder="Doe")
+        email = st.text_input("Email", placeholder="you@example.com")
+        password = st.text_input("Password", placeholder="Min. 8 characters", type="password")
+        retype = st.text_input("Retype password", placeholder="Re-enter password", type="password")
+        submitted = st.form_submit_button("Create account", type="primary", use_container_width=True)
+        if submitted:
+            errors = []
+            if not first_name.strip():
+                errors.append("First name is required.")
+            if not last_name.strip():
+                errors.append("Last name is required.")
+            if not email.strip() or "@" not in email:
+                errors.append("A valid email address is required.")
+            if len(password) < 8:
+                errors.append("Password must be at least 8 characters.")
+            if password != retype:
+                errors.append("Passwords do not match.")
+            if errors:
+                for err in errors:
+                    st.warning(err)
+            else:
+                pw_hash = hashlib.sha256(password.encode()).hexdigest()
+                st.session_state.signed_in = True
+                st.session_state.user_first_name = first_name.strip()
+                st.session_state.user_last_name = last_name.strip()
+                st.session_state.user_name = f"{first_name.strip()} {last_name.strip()}"
+                st.session_state.user_email = email.strip()
+                st.session_state.user_password_hash = pw_hash
+                st.rerun()
+    st.markdown(
+        '<p class="auth-switch">Already have an account?</p>',
+        unsafe_allow_html=True,
+    )
+    if st.button("Sign in instead →", key="signup_to_signin", use_container_width=True):
+        st.session_state.open_signin = True
+        st.rerun()
+
+
+
 
 
 def render_course_feature() -> None:
@@ -685,7 +854,7 @@ def render_course_feature() -> None:
         <div class="course-feature">
             <div>
                 <div class="section-kicker">Course Playlist</div>
-                <div class="course-title">{html.escape(MIT_COURSE_TITLE)}</div>
+                <a class="course-title" href="?page=course" target="_self">{html.escape(MIT_COURSE_TITLE)}</a>
                 <div class="course-copy">
                     Browse the MIT 6.S191 lecture playlist, prepare the videos with a shared course scope,
                     and ask questions across the full course instead of one video at a time.
@@ -701,36 +870,29 @@ def render_course_feature() -> None:
         """,
         unsafe_allow_html=True,
     )
-    _, action_col = st.columns([0.72, 0.28])
-    with action_col:
-        if st.button("Explore course", key="home_course_tile", type="primary", use_container_width=True):
-            navigate_to("course")
-
-
 def render_course_page() -> None:
     render_header()
 
+    st.markdown('<div class="section-kicker">MIT Course Tile</div>', unsafe_allow_html=True)
+    head_col, action_col = st.columns([0.72, 0.28], gap="large")
+    with head_col:
+        st.markdown(f'<h1 class="section-heading">{html.escape(MIT_COURSE_TITLE)}</h1>', unsafe_allow_html=True)
+    with action_col:
+        prepare_clicked = st.button(
+            "Prepare full course",
+            key="course_prepare",
+            type="secondary",
+            use_container_width=True,
+        )
     st.markdown(
         f"""
-        <div class="course-page-head">
-            <div>
-                <div class="section-kicker">MIT Course Tile</div>
-                <h1 class="section-heading">{html.escape(MIT_COURSE_TITLE)}</h1>
-                <div class="section-copy">
-                    Select a lecture to watch and query with course-wide retrieval. Use Prepare full course
-                    to ingest the playlist sequentially under {html.escape(MIT_COURSE_ID)}.
-                </div>
-            </div>
+        <div class="section-copy">
+            Select a lecture to watch and query with course-wide retrieval. Use Prepare full course
+            to ingest the playlist sequentially under {html.escape(MIT_COURSE_ID)}.
         </div>
         """,
         unsafe_allow_html=True,
     )
-    action_cols = st.columns([0.18, 0.2, 0.62])
-    with action_cols[0]:
-        if st.button("Back home", use_container_width=True):
-            navigate_to("home")
-    with action_cols[1]:
-        prepare_clicked = st.button("Prepare full course", type="primary", use_container_width=True)
 
     if prepare_clicked:
         progress = st.progress(0, text="Starting course ingest...")
@@ -783,7 +945,7 @@ def render_course_page() -> None:
                 """,
                 unsafe_allow_html=True,
             )
-            if st.button("Load lecture", key=f"course_video_{video_id}", use_container_width=True):
+            if st.button("Start learning", key=f"course_video_{video_id}", use_container_width=True):
                 st.session_state.pending_course_video_id = video_id
                 st.rerun()
 
@@ -791,11 +953,13 @@ def render_course_page() -> None:
 def render_home_page() -> None:
     render_header()
     st.markdown('<div class="home-spacer"></div>', unsafe_allow_html=True)
-    st.markdown('<h1 class="home-title">Build a grounded learning graph</h1>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="home-subtitle">Index a lecture, course, or document, then ask source-grounded questions with citations and confidence.</div>',
-        unsafe_allow_html=True,
-    )
+    _, hero_col, _ = st.columns([1, 6, 1])
+    with hero_col:
+        st.markdown('<h1 class="home-title">Your Lecture. Your Graph. Your Answers.</h1>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="home-subtitle">GraphLens maps every concept, finds every connection, and cites every claim.</div>',
+            unsafe_allow_html=True,
+        )
     spacer_l, col1, col2, spacer_r = st.columns([1.5, 2.3, 2.3, 1.5], gap="large")
     with col1:
         if st.button("🔗\n\nLink URL\n\nConnect web resources", key="home_link_card", use_container_width=True):
@@ -1070,37 +1234,47 @@ def render_learning_session() -> None:
         if not graph_available:
             st.caption("Neo4j is not connected. Plain RAG is active.")
 
-        chat_container = st.container(height=555, border=True)
-        with chat_container:
-            for msg in st.session_state.messages:
-                with st.chat_message(msg["role"]):
-                    if msg["role"] == "assistant" and not msg.get("refused"):
-                        render_answer_markdown(msg["content"])
-                        badge = confidence_badge_html(msg.get("confidence"))
-                        if badge:
-                            st.markdown(badge, unsafe_allow_html=True)
-                    else:
-                        st.write(msg["content"])
-                    if msg.get("best_similarity") is not None and not msg.get("refused"):
-                        st.caption(f"Best similarity: {msg['best_similarity']:.3f}")
-                    if msg.get("model") and not msg.get("refused"):
-                        st.caption(f"Model: {msg['model']}")
-            if st.session_state.pending_query:
-                with st.chat_message("assistant"):
-                    with st.spinner("Retrieving grounded evidence..."):
-                        st.caption("Working on an answer...")
+        chat_panel = st.container(height=555, border=True)
+        with chat_panel:
+            msg_scroll = st.container(height=462, border=False)
+            with msg_scroll:
+                for msg in st.session_state.messages:
+                    with st.chat_message(msg["role"]):
+                        if msg["role"] == "assistant" and not msg.get("refused"):
+                            render_answer_markdown(msg["content"])
+                            badge = confidence_badge_html(msg.get("confidence"))
+                            if badge:
+                                st.markdown(badge, unsafe_allow_html=True)
+                        else:
+                            st.write(msg["content"])
+                        if msg.get("best_similarity") is not None and not msg.get("refused"):
+                            st.caption(f"Best similarity: {msg['best_similarity']:.3f}")
+                        if msg.get("model") and not msg.get("refused"):
+                            st.caption(f"Model: {msg['model']}")
+                if st.session_state.pending_query:
+                    with st.chat_message("assistant"):
+                        with st.spinner("Retrieving grounded evidence..."):
+                            st.caption("Working on an answer...")
 
-        with st.form("query_form", clear_on_submit=True):
-            prompt = st.text_input(
-                "Ask about the indexed source",
-                placeholder="Query the grounded graph...",
-                label_visibility="collapsed",
-            )
-            submitted = st.form_submit_button("Send", type="primary", use_container_width=True)
-            if submitted and prompt.strip():
-                st.session_state.messages.append({"role": "user", "content": prompt.strip()})
-                st.session_state.pending_query = prompt.strip()
-                st.rerun()
+            with st.form("query_form", clear_on_submit=True):
+                q_in, q_send = st.columns([0.87, 0.13], gap="small")
+                with q_in:
+                    prompt = st.text_input(
+                        "Ask about the indexed source",
+                        placeholder="Ask your question...",
+                        label_visibility="collapsed",
+                    )
+                with q_send:
+                    submitted = st.form_submit_button(
+                        "→",
+                        type="primary",
+                        use_container_width=True,
+                        key="query_send_arrow",
+                    )
+                if submitted and prompt.strip():
+                    st.session_state.messages.append({"role": "user", "content": prompt.strip()})
+                    st.session_state.pending_query = prompt.strip()
+                    st.rerun()
 
         if st.session_state.pending_query:
             pending_query = st.session_state.pending_query
@@ -1109,9 +1283,22 @@ def render_learning_session() -> None:
             st.rerun()
 
 
-if st.session_state.page == "home":
-    render_home_page()
-elif st.session_state.page == "course":
-    render_course_page()
-elif st.session_state.page == "session":
-    render_learning_session()
+
+
+def dispatch_page() -> None:
+    if st.session_state.page == "home":
+        render_home_page()
+    elif st.session_state.page == "course":
+        render_course_page()
+    elif st.session_state.page == "session":
+        render_learning_session()
+
+
+if st.session_state.get("menu_open"):
+    drawer_col, main_col = st.columns([0.265, 0.735], gap="medium")
+    with drawer_col:
+        render_nav_drawer()
+    with main_col:
+        dispatch_page()
+else:
+    dispatch_page()
