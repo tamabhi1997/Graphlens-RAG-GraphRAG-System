@@ -1,6 +1,9 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from typing import Optional
 import json
+import os
+import shutil
+
 
 from server_backend.schemas.pdf_index import IndexPdfResponse
 from graphlens.pipelines.ingest_pdf_v1 import ingest_pdf_v1
@@ -14,46 +17,32 @@ async def pdf_index(
     collection_name: str = Form(default="graphlens_chunks"),
     force_reindex: bool = Form(default=False),
     course_id: Optional[str] = Form(default=None),
-    chunk_cfg: Optional[str] = Form(default=None),  # JSON string from frontend
+    chunk_cfg: Optional[str] = Form(default=None),
 ):
-    """
-    Ingest a PDF file into GraphLens.
-
-    The frontend sends a multipart/form-data request with:
-      - file:            the actual PDF bytes
-      - collection_name: (optional) Chroma collection name
-      - force_reindex:   (optional) wipe and re-index if already stored
-      - course_id:       (optional) group multiple docs under a course scope
-      - chunk_cfg:       (optional) JSON string of chunker overrides
-
-    Returns scope_type="document" and scope_id=doc_id for subsequent queries.
-    """
-
-    # Validate file type
     if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(
-            status_code=400,
-            detail="Only PDF files are supported. Please upload a .pdf file."
-        )
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
-    # Read bytes
     try:
         pdf_bytes = await file.read()
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to read file: {e}")
 
+    # ← ADD HERE: save to disk for static serving
+    safe_filename = file.filename.replace(" ", "_")
+    pdf_dir = "data/pdfs"
+    os.makedirs(pdf_dir, exist_ok=True)
+    pdf_path = os.path.join(pdf_dir, safe_filename)
+    with open(pdf_path, "wb") as f:
+        f.write(pdf_bytes)
+        file.seek(0)
+
     if len(pdf_bytes) == 0:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
-    # 50 MB hard limit
     MAX_BYTES = 50 * 1024 * 1024
     if len(pdf_bytes) > MAX_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large ({len(pdf_bytes) // (1024*1024)} MB). Maximum is 50 MB."
-        )
+        raise HTTPException(status_code=413, detail=f"File too large.")
 
-    # Parse optional chunk_cfg JSON string
     parsed_chunk_cfg = None
     if chunk_cfg:
         try:
@@ -61,7 +50,6 @@ async def pdf_index(
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="chunk_cfg must be valid JSON.")
 
-    # Run ingest pipeline
     try:
         out = ingest_pdf_v1(
             pdf_bytes=pdf_bytes,
@@ -71,6 +59,8 @@ async def pdf_index(
             chunk_cfg=parsed_chunk_cfg,
             course_id=course_id,
         )
+        # ← ADD HERE: attach pdf_url to response
+        out["pdf_url"] = f"http://127.0.0.1:8000/static/pdfs/{safe_filename}"
         return IndexPdfResponse(**out)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

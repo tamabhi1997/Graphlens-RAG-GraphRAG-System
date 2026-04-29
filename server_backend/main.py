@@ -6,7 +6,8 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from server_backend.api.router import api_router
-
+from fastapi.staticfiles import StaticFiles
+import os
 
 app = FastAPI(title="GraphLens API")
 
@@ -19,6 +20,9 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api")
+
+os.makedirs("data/pdfs", exist_ok=True)
+app.mount("/static/pdfs", StaticFiles(directory="data/pdfs"), name="pdfs")
 
 
 @app.get("/")

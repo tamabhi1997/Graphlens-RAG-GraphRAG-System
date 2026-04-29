@@ -332,7 +332,7 @@ def upload_pdf_dialog() -> None:
         if not uploaded_file:
             st.warning("Choose a PDF first.")
             return
-        with st.spinner("Loading..."):
+        with st.spinner("Loading... Indexing PDF — extracting text, generating embeddings and building knowledge graph. This takes 1-2 minutes for large documents..."):
             try:
                 response = post_pdf(uploaded_file)
                 apply_ingest_response("pdf", uploaded_file, uploaded_file.name, response)
@@ -1042,17 +1042,54 @@ def render_source(source: dict[str, Any], index: int) -> None:
         """,
         unsafe_allow_html=True,
     )
-    if source_url and not is_pdf:
+    if is_pdf and page_or_time is not None:
+        page_num = int(float(page_or_time))
+        pdf_url = (st.session_state.content_meta or {}).get("pdf_url", "")
+        if pdf_url:
+            st.link_button(f"Jump to Page {page_num}", f"{pdf_url}#page={page_num}")
+    elif source_url and not is_pdf:
         st.link_button("Open timestamp", source_url)
 
 
+# def render_answer_markdown(answer: str) -> None:
+#     escaped = html.escape(answer)
+#     rendered = re.sub(
+#         r"\[(\d+)\]",
+#         lambda match: f'<sup class="source-badge">[{match.group(1)}]</sup>',
+#         escaped,
+#     )
+#     st.markdown(rendered, unsafe_allow_html=True)
 def render_answer_markdown(answer: str) -> None:
+    sources = st.session_state.sources or []
+    pdf_url = (st.session_state.content_meta or {}).get("pdf_url", "")
+    is_pdf = st.session_state.scope_type == "document"
+
+    def make_badge(match):
+        num = int(match.group(1))
+        idx = num - 1  # citations are 1-indexed
+        if is_pdf and pdf_url and 0 <= idx < len(sources):
+            page = int(float(sources[idx].get("start_seconds", 1)))
+            jump_url = f"{pdf_url}#page={page}"
+            return (
+                    f'<a href="{jump_url}" target="_blank" '
+                    f'class="source-badge" style="text-decoration:none;">'
+                    f'[{num}]</a>'
+                )
+
+        elif not is_pdf and 0 <= idx < len(sources):
+            video_id = sources[idx].get("video_id", "")
+            t = int(float(sources[idx].get("start_seconds", 0)))
+            if video_id:
+                url = f"https://youtube.com/watch?v={video_id}&t={t}"
+                return (
+                    f'<a href="{url}" target="_blank" '
+                    f'class="source-badge" style="text-decoration:none;">'
+                    f'[{num}]</a>'
+                )
+        return f'<sup class="source-badge">[{num}]</sup>'
+
     escaped = html.escape(answer)
-    rendered = re.sub(
-        r"\[(\d+)\]",
-        lambda match: f'<sup class="source-badge">[{match.group(1)}]</sup>',
-        escaped,
-    )
+    rendered = re.sub(r"\[(\d+)\]", make_badge, escaped)
     st.markdown(rendered, unsafe_allow_html=True)
 
 
@@ -1149,12 +1186,26 @@ def render_content_preview() -> None:
     if st.session_state.content_type in {"youtube", "course"}:
         st.video(st.session_state.content_data)
     elif st.session_state.content_type == "pdf":
-        pdf_bytes = st.session_state.content_data.getvalue()
-        base64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
-        st.markdown(
-            f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="460" type="application/pdf" style="border:none; border-radius:18px;"></iframe>',
-            unsafe_allow_html=True,
-        )
+        pdf_url = (st.session_state.content_meta or {}).get("pdf_url")
+        if pdf_url:
+            st.markdown(
+                f'<iframe src="{pdf_url}" name="pdf-viewer" width="100%" height="460" '
+                f'style="border:none; border-radius:18px;"></iframe>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f"""
+                <div class="player-shell">
+                    <div>
+                        <div class="placeholder-camera">📄</div>
+                        <div class="placeholder-title">{html.escape(str(st.session_state.content_name or "Document"))}</div>
+                        <div class="placeholder-subtitle">Ask a question below to explore this document</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
     else:
         st.markdown(
             f"""
