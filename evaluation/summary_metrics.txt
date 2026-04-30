@@ -1,0 +1,11 @@
+GraphLens Evaluation Summary
+==============================
+Total questions:         50
+Answered (not refused):  32
+Refused:                 18
+
+Graph expansion rate:    32/32 = 100.0% (questions where graph fired)
+Mean confidence (GraphRAG): 0.704
+
+See evaluation/ragas_results.csv for faithfulness + answer relevancy.
+See evaluation/llm_baseline_results.csv for LLM baseline answers (needs manual labels).

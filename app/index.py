@@ -1474,7 +1474,7 @@ def submit_query(prompt: str) -> None:
                 "scope_type": st.session_state.scope_type,
                 "scope_id": st.session_state.scope_id,
                 "collection_name": COLLECTION_NAME,
-                "use_graph": bool(st.session_state.use_graph and graph_available),
+                "use_graph": bool(st.session_state.scope_type in {"document", "course"} and graph_available)
             },
         )
         st.session_state.sources = response.get("sources", [])
@@ -1559,7 +1559,10 @@ def render_learning_session() -> None:
         graph_available = st.session_state.graph_health and st.session_state.graph_health.get("neo4j") == "connected"
         if not graph_available:
             st.session_state.use_graph = False
-        st.toggle("Use GraphRAG", key="use_graph", disabled=not bool(graph_available))
+        if st.session_state.scope_type in {"document", "course"}:
+            st.caption("● GraphRAG active — knowledge graph expansion enabled")
+        else:
+            st.caption("● Plain RAG — fast single-video retrieval")
         if not graph_available:
             st.caption("Neo4j is not connected. Plain RAG is active.")
 
@@ -1570,10 +1573,10 @@ def render_learning_session() -> None:
                 for msg in st.session_state.messages:
                     with st.chat_message(msg["role"]):
                         if msg["role"] == "assistant" and not msg.get("refused"):
-                            render_answer_markdown(msg["content"])
                             badge = confidence_badge_html(msg.get("confidence"))
                             if badge:
                                 st.markdown(badge, unsafe_allow_html=True)
+                            render_answer_markdown(msg["content"])
                         else:
                             st.write(msg["content"])
                         if msg.get("best_similarity") is not None and not msg.get("refused"):
