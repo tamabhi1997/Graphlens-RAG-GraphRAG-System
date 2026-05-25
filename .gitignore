@@ -19,3 +19,4 @@ data/vector_indexes/*
 !data/processed/.gitkeep
 !data/vector_indexes/.gitkeep
 !data/samples/.gitkeep
+data/
