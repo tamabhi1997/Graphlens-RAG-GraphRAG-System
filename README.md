@@ -21,7 +21,7 @@ Standard RAG systems retrieve by vector similarity alone, missing conceptual rel
 ## Demo
 
 <!-- Replace with your actual demo video link -->
-[![Watch Demo](assets/demo_thumbnail.png)](https://youtu.be/YOUR_DEMO_LINK)
+[![Watch Demo](assets/demo_thumbnail.png)](https://drive.google.com/file/d/1Nd17ZuJ9AmMD_NOFonbprzRXIDPtNp5w/view)
 
 ---
 
