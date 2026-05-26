@@ -29,7 +29,7 @@ Standard RAG systems retrieve by vector similarity alone, missing conceptual rel
 
 | PDF Tile | Concept Map |
 |---|---|
-| ![PDF Viewer](Fig2.png) | ![Concept Map](assets/screenshot_graph.png) |
+| ![PDF Viewer](Fig2.png) | ![Concept Map](concept.png) |
 
 ---
 
