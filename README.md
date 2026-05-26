@@ -52,7 +52,7 @@ Evaluated on a 50-question benchmark across four retrieval conditions:
 
 ## Architecture
 
-![System Architecture](assets/architecture.png)
+![System Architecture](Fig1.png)
 
 ### 7-Stage Pipeline
 
